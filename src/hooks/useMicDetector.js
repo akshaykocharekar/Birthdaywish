@@ -1,31 +1,61 @@
 import { useEffect, useState } from "react";
 
-export default function useMicDetector(threshold = 40) {
+export default function useMicDetector(threshold = 15) {
   const [isBlown, setIsBlown] = useState(false);
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      const audioContext = new window.AudioContext();
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
+    let audioContext;
+    let analyser;
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: {
+          echoCancellation: false,
+          autoGainControl: false,
+          noiseSuppression: false,
+        },
+      })
+      .then((stream) => {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
 
-      const detect = () => {
-        analyser.getByteFrequencyData(dataArray);
-        const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const mic = audioContext.createMediaStreamSource(stream);
+        mic.connect(analyser);
 
-        if (volume > threshold) {
-          setIsBlown(true);
-        }
-        requestAnimationFrame(detect);
-      };
+        analyser.fftSize = 1024;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-      detect();
-    });
-  }, []);
+        const detectBlow = () => {
+          analyser.getByteTimeDomainData(dataArray);
+
+          // Convert waveform to "air pressure level"
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            let v = (dataArray[i] - 128) / 128;
+            sum += v * v;
+          }
+
+          const rms = Math.sqrt(sum / dataArray.length) * 100;
+
+          // console.log("volume:", rms); // enable for debugging
+
+          if (rms > threshold && !isBlown) {
+            setIsBlown(true);
+          }
+
+          requestAnimationFrame(detectBlow);
+        };
+
+        detectBlow();
+      })
+      .catch((err) => {
+        console.error("Mic error:", err);
+      });
+
+    return () => {
+      if (audioContext) audioContext.close();
+    };
+  }, [threshold]);
 
   return isBlown;
 }

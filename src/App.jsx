@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./components/Landing";
 import Cake from "./components/Cake";
 import Montage from "./components/Montage";
-import "./app.css";
+import "./App.css";
 export default function App() {
   return (
     <BrowserRouter>
